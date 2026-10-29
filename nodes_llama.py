@@ -15,6 +15,7 @@ from datetime import datetime
 import folder_paths
 
 from .llama_backend import LLAMA_CPP_STORAGE, chat_handlers
+from .codex_backend import CODEX_PROVIDER, CodexBackendError, chat as codex_chat
 from .story_nodes import normalize_slots
 from .support_llama.presets.minimax_t2va import MINIMAX_T2VA_EN, MINIMAX_T2VA_ZH
 from .support_llama.presets.minimax_i2va import MINIMAX_I2VA_EN, MINIMAX_I2VA_ZH
@@ -640,6 +641,7 @@ class JZL_MiniMaxAPISettings:
         "OpenAI 兼容 (OpenAI/DeepSeek/Qwen/GLM/Kimi/Ollama/vLLM/LM Studio)",
         "Anthropic",
         "Google Gemini",
+        CODEX_PROVIDER,
     ]
 
     @classmethod
@@ -674,6 +676,9 @@ class JZL_MiniMaxAPISettings:
             "max_tokens": settings.get("max_tokens", 81920),
             "thinking": settings.get("thinking"),
         }
+        for key in ("codex_model", "codex_reasoning", "codex_timeout"):
+            if key in settings:
+                config[key] = settings[key]
         return (json.dumps(config, ensure_ascii=False),)
 
 
@@ -1053,6 +1058,11 @@ class JZL_MiniMax_ScriptProcessor:
         except Exception:
             return "[API 配置错误] 无法解析 API 配置 JSON"
         provider = cfg.get("provider", "")
+        if provider == CODEX_PROVIDER:
+            try:
+                return codex_chat(system_prompt, user_msg, cfg)
+            except CodexBackendError as e:
+                return f"[API 错误] {e}"
         model = (cfg.get("model") or "").strip()
         api_key = (cfg.get("api_key") or "").strip()
         base_url = (cfg.get("base_url") or "").strip()

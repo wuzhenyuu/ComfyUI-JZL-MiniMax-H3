@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { createCodexModelPicker } from "./codex_model_picker.js";
 
 // ============================================================
 // JZL_MiniMaxAPISettings — 点击「打开 API 设置」弹窗配置
@@ -9,10 +10,12 @@ import { api } from "../../scripts/api.js";
 
 const NODE_TYPE = "JZL_MiniMaxAPISettings";
 const ENDPOINT = "/jzl/api_settings";
+const CODEX_PROVIDER = "Codex (本机登录)";
 const PROVIDERS = [
     "OpenAI 兼容 (OpenAI/DeepSeek/Qwen/GLM/Kimi/Ollama/vLLM/LM Studio)",
     "Anthropic",
     "Google Gemini",
+    CODEX_PROVIDER,
 ];
 
 let settingsModal = null;
@@ -160,6 +163,13 @@ async function openSettings(node) {
     temperature.min = "0"; temperature.max = "2"; temperature.step = "0.01";
     const maxTokens = makeInput("number", cache.max_tokens ?? 81920, "1 ~ 262144");
     maxTokens.min = "1"; maxTokens.max = "262144"; maxTokens.step = "1";
+    const codexPicker = createCodexModelPicker(cache.codex_model);
+    const codexModel = codexPicker.select;
+    const codexReasoning = makeSelect(["high", "xhigh", "medium", "low", ""], cache.codex_reasoning ?? "high");
+    codexReasoning.lastElementChild.textContent = "继承本机默认";
+    const codexTimeout = makeInput("number", cache.codex_timeout ?? 1800, "超时秒数，默认 1800");
+    codexTimeout.min = "1"; codexTimeout.step = "1";
+    let codexSelected = provider.value === CODEX_PROVIDER;
 
     const thinkingLabel = document.createElement("div");
     thinkingLabel.style.cssText = "display:flex;align-items:center;gap:10px;margin:7px 0;";
@@ -174,15 +184,36 @@ async function openSettings(node) {
 
     const form = document.createElement("form");
     form.id = "jzl-api-settings-form";
-    form.append(
-        makeRow("Provider", provider),
+    const httpRows = [
         makeRow("模型名", model),
         makeRow("API Key", apiKey),
         makeRow("Base URL", baseUrl),
         makeRow("温度", temperature),
         makeRow("最大Token", maxTokens),
         thinkingLabel,
-    );
+    ];
+    const codexHint = document.createElement("div");
+    codexHint.textContent = "使用本机已登录的 Codex，每次独立执行；无需 API Key。模型留空沿用本机默认，温度、Token 和 DeepSeek 思考设置不适用。";
+    codexHint.style.cssText = "font-size:12px;color:var(--fg-color,#888);line-height:1.6;margin:8px 0;";
+    const codexRows = [
+        codexHint,
+        makeRow("Codex 模型", codexPicker.container),
+        makeRow("推理档位", codexReasoning),
+        makeRow("超时（秒）", codexTimeout),
+    ];
+    form.append(makeRow("Provider", provider), ...httpRows, ...codexRows);
+    const syncProvider = () => {
+        const isCodex = provider.value === CODEX_PROVIDER;
+        if (isCodex) codexSelected = true;
+        httpRows.forEach((row) => { row.style.display = isCodex ? "none" : "flex"; });
+        codexRows.forEach((row) => { row.style.display = isCodex ? (row === codexHint ? "block" : "flex") : "none"; });
+        [model, apiKey, baseUrl, temperature, maxTokens, thinking].forEach((input) => { input.disabled = isCodex; });
+        [codexModel, codexReasoning, codexTimeout].forEach((input) => { input.disabled = !isCodex; });
+        codexPicker.button.disabled = !isCodex;
+        if (isCodex) codexPicker.load();
+    };
+    provider.addEventListener("change", syncProvider);
+    syncProvider();
 
     const error = document.createElement("div");
     error.style.cssText = "color:#e06c75;font-size:12px;margin-top:8px;";
@@ -219,7 +250,7 @@ async function openSettings(node) {
         saveBtn.disabled = true;
         error.hidden = true;
         try {
-            await saveSettings({
+            const settings = {
                 provider: provider.value,
                 model: model.value.trim(),
                 api_key: apiKey.value.trim(),
@@ -227,7 +258,13 @@ async function openSettings(node) {
                 temperature: Number(temperature.value),
                 max_tokens: Number(maxTokens.value),
                 thinking: thinking.checked ? "enabled" : "disabled",
-            });
+            };
+            if (codexSelected || ["codex_model", "codex_reasoning", "codex_timeout"].some((key) => key in cache)) {
+                settings.codex_model = codexModel.value.trim();
+                settings.codex_reasoning = codexReasoning.value;
+                settings.codex_timeout = Number(codexTimeout.value);
+            }
+            await saveSettings(settings);
             notify("API 设置已保存");
             close();
             // 配置已变：标记相关节点脏，下次执行时 IS_CHANGED 会触发重跑
@@ -241,7 +278,7 @@ async function openSettings(node) {
         }
     });
 
-    setTimeout(() => model.focus?.(), 50);
+    setTimeout(() => (provider.value === CODEX_PROVIDER ? codexModel : model).focus?.(), 50);
 }
 
 app.registerExtension({

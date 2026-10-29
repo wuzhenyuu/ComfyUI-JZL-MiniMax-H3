@@ -13,6 +13,7 @@
 
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { createCodexModelPicker } from "./codex_model_picker.js";
 
 const NODE_TYPE = "JZL_MiniMaxAssetManager";
 const MINI_NODE_TYPE = "JZL_MiniMaxAssetManagerMini";
@@ -147,6 +148,7 @@ const OPTIONS = {
         "OpenAI 兼容 (OpenAI/DeepSeek/Qwen/GLM/Kimi/Ollama/vLLM/LM Studio)",
         "Anthropic",
         "Google Gemini",
+        "Codex (本机登录)",
     ],
     shotSize: ["根据剧情", "随机组合", "远景为主", "全景为主", "中景为主", "近景为主", "特写为主", "大特写为主"],
     // 🔭 视角机位（视角/角度走自然语言注入；官方仅对「运镜」给了封闭词表）
@@ -4228,13 +4230,35 @@ function renderPromptPanel(c, s, d, node) {
     const apiBox = el("div", "");
     apiBox.append(makeSectionTitle("在线 API"));
     const api = p.api || (p.api = {});
-    apiBox.append(field("服务商", selectControl(OPTIONS.providers, api.provider || OPTIONS.providers[0], v => { api.provider = v; })));
-    apiBox.append(field("模型", textControl(api.model || "deepseek-flash", "deepseek-flash…", v => { api.model = v; })));
-    apiBox.append(field("API Key", passwordControl(api.api_key || "", "sk-…（已隐藏）", v => { api.api_key = v; })));
-    apiBox.append(field("Base URL", textControl(api.base_url || "https://api.deepseek.com", "https://api.deepseek.com", v => { api.base_url = v; })));
-    apiBox.append(field("temperature", numberControl(api.temperature ?? 0.6, { min: 0, max: 2, step: 0.01 }, v => { api.temperature = v; })));
-    apiBox.append(field("max_tokens", numberControl(api.max_tokens ?? 81920, { min: 1, max: 262144, step: 1 }, v => { api.max_tokens = Math.round(v); })));
-    apiBox.append(field("thinking", selectControl(["disabled", "enabled"], api.thinking || "disabled", v => { api.thinking = v; })));
+    const httpSettings = el("div", "");
+    httpSettings.append(field("模型", textControl(api.model || "deepseek-flash", "deepseek-flash…", v => { api.model = v; })));
+    httpSettings.append(field("API Key", passwordControl(api.api_key || "", "sk-…（已隐藏）", v => { api.api_key = v; })));
+    httpSettings.append(field("Base URL", textControl(api.base_url || "https://api.deepseek.com", "https://api.deepseek.com", v => { api.base_url = v; })));
+    httpSettings.append(field("temperature", numberControl(api.temperature ?? 0.6, { min: 0, max: 2, step: 0.01 }, v => { api.temperature = v; })));
+    httpSettings.append(field("max_tokens", numberControl(api.max_tokens ?? 81920, { min: 1, max: 262144, step: 1 }, v => { api.max_tokens = Math.round(v); })));
+    httpSettings.append(field("thinking", selectControl(["disabled", "enabled"], api.thinking || "disabled", v => { api.thinking = v; })));
+    const codexSettings = el("div", "");
+    codexSettings.append(el("div", "font-size:12px;color:var(--descrip-text,#999);line-height:1.6;margin:8px 0;",
+        "使用本机已登录的 Codex，每次独立执行；无需 API Key。模型留空沿用本机默认，温度、Token 和 DeepSeek 思考设置不适用。"));
+    const codexPicker = createCodexModelPicker(api.codex_model, v => { api.codex_model = v; });
+    codexSettings.append(field("Codex 模型", codexPicker.container));
+    codexSettings.append(field("推理档位", selectControl([
+        { value: "high", label: "high" }, { value: "xhigh", label: "xhigh" },
+        { value: "medium", label: "medium" }, { value: "low", label: "low" },
+        { value: "", label: "继承本机默认" },
+    ], api.codex_reasoning ?? "high", v => { api.codex_reasoning = v; })));
+    codexSettings.append(field("超时（秒）", numberControl(api.codex_timeout ?? 1800, { min: 1, max: "", step: 1 }, v => { api.codex_timeout = Math.round(v); })));
+    const syncApiProvider = () => {
+        const isCodex = api.provider === "Codex (本机登录)";
+        httpSettings.style.display = isCodex ? "none" : "block";
+        codexSettings.style.display = isCodex ? "block" : "none";
+        httpSettings.querySelectorAll("input,select,button").forEach((input) => { input.disabled = isCodex; });
+        codexSettings.querySelectorAll("input,select,button").forEach((input) => { input.disabled = !isCodex; });
+        if (isCodex) codexPicker.load();
+    };
+    apiBox.append(field("服务商", selectControl(OPTIONS.providers, api.provider || OPTIONS.providers[0], v => { api.provider = v; syncApiProvider(); })));
+    apiBox.append(httpSettings, codexSettings);
+    syncApiProvider();
     c.append(apiBox);
 
     const syncBackend = () => {

@@ -2,6 +2,12 @@
 
 MiniMax H3 视频生成节点（基于 ComfyUI V3 `io.Schema` 机制）。
 
+## 本 Fork 的可选 Codex 扩展
+
+本 Fork 基于上游作者 wjluoxiao 的 [ComfyUI-JZL-MiniMax-H3](https://github.com/wjluoxiao/ComfyUI-JZL-MiniMax-H3)，保留原有功能及许可证，新增可选的 `Codex (本机登录)` 文本服务商和独立 Codex 生图/改图节点。使用方式与限制见 [本机 Codex 指南](docs/CODEX_LOCAL.md)。
+
+该扩展依赖相邻的本机 `comfyui-codex-cli-nodes` 执行层。本 Fork 不分发该执行层，目前也没有可提供的公开自动安装来源，因此不承诺仅安装本 Fork 即可使用 Codex。未配备该执行层时，Codex 功能不可用，原接口及其默认选项不受影响。
+
 ## 当前节点
 
 | 节点 | node_id | 说明 |

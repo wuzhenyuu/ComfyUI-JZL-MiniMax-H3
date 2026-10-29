@@ -6,6 +6,7 @@
 """
 
 import os
+import asyncio
 import re
 import sys
 import time
@@ -112,6 +113,9 @@ _JZL_IMPORT_GROUPS = (
         (".nodes_h3_editor", ("JZL_MiniMaxH3PromptEditor",)),
         (".nodes_ref_bus", ("JZL_MiniMaxH3RefBusOut", "JZL_MiniMaxH3RefBusIn")),
         (".nodes_ref2va_bus", ("JZL_MiniMaxH3Ref2vaBusOut", "JZL_MiniMaxH3Ref2vaBusIn")),
+    )),
+    ("Codex 生图", False, (
+        (".nodes_codex_image", ("JZL_CodexImageGenerate",)),
     )),
 )
 
@@ -275,6 +279,7 @@ _JZL_NODE_TABLE = (
     ("JZL_MiniMaxVideoSaveDistributor", "JZL - 💾 视频保存分配"),
     ("JZL_MiniMaxVideoViewer", "JZL - 🎬 生成视频查看器"),
     ("JZL_MiniMaxScriptViewer", "JZL - 📝 生成剧本查看器"),
+    ("JZL_CodexImageGenerate", "JZL Codex 生图/改图（本机）"),
 )
 
 NODE_CLASS_MAPPINGS = {}
@@ -349,6 +354,17 @@ async def minimax_default_dir(request):
 
 
 # ── 后端端点（API 设置弹窗读写，Key 不明文进工作流） ─────────────────
+
+@PromptServer.instance.routes.get("/jzl/codex/models")
+async def jzl_codex_models_get(request):
+    from .codex_backend import CodexBackendError, model_catalog
+
+    try:
+        catalog = await asyncio.to_thread(model_catalog, request.query.get("refresh") == "1")
+        return web.json_response({"ok": True, **catalog})
+    except (CodexBackendError, OSError):
+        return web.json_response({"ok": False, "error": "无法识别本机 Codex 模型，请检查 CLI 登录后重新识别。"}, status=503)
+
 
 @PromptServer.instance.routes.get("/jzl/api_settings")
 async def jzl_api_settings_get(request):
